@@ -8,7 +8,6 @@ from scipy.stats import uniform, randint
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 from lightgbm import LGBMRegressor
-#import xgboost as xgb
 import plotly.express as px
 from feature_engineering import feature_pipeline
 
@@ -61,33 +60,21 @@ def model_train(df: pd.DataFrame) -> None:
 	        'min_child_samples': [20, 50],
     }
     model = LGBMRegressor(n_jobs=-1)
-    #model.set_params(**params)
     gbm = RandomizedSearchCV(model, params, cv=3, scoring="neg_root_mean_squared_error", n_jobs=-1)
-    gbm.fit(features, imbalance) #, eval_set=[(X_test, y_test)], eval_metric="average_precision", verbose = -1)
-    # search = RandomizedSearchCV(
-    #     xgb_model,
-    #     param_distributions=params,
-    #     random_state=42,
-    #     n_iter=50,
-    #     cv=3,
-    #     n_jobs=-1,
-    #     return_train_score=True,
-    #     verbose=10,
-    # )
-    #search.fit(features, imbalance)
+    gbm.fit(features, imbalance) 
     best_parameters = report_best_scores(gbm.cv_results_, 1)
 
     # Train on full data
     print("Training on full model")
     lgbm_model = LGBMRegressor(**best_parameters)
     lgbm_model.fit(features, imbalance)
-    #lgbm_model.feature_names = feature_names
     pickle.dump(lgbm_model, open("model.pickle", "wb"))
 
     y_pred = lgbm_model.predict(features)
     evaluate_model(y_pred, imbalance)
 
     feature_imp = pd.DataFrame(sorted(zip(lgbm_model.feature_importances_,features)), columns=['Value','Feature'])
+
     # Plot feature importance
     # import matplotlib.pyplot as plt
     # import seaborn as sns
@@ -96,7 +83,6 @@ def model_train(df: pd.DataFrame) -> None:
     # plt.title('LightGBM Features')
     # plt.tight_layout()
     # plt.show()
-
 
 if __name__ == "__main__":
     data = feature_pipeline("train")
