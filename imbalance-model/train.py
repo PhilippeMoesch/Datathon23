@@ -6,8 +6,9 @@ import pandas as pd
 
 from scipy.stats import uniform, randint
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from sklearn.model_selection import RandomizedSearchCV
-import xgboost as xgb
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+from lightgbm import LGBMRegressor
+#import xgboost as xgb
 import plotly.express as px
 from feature_engineering import feature_pipeline
 
@@ -45,44 +46,56 @@ def model_train(df: pd.DataFrame) -> None:
     features, imbalance, feature_names = split_features_imbalance(df)
     feature_names = df.drop(columns=["imbalance", "ts"]).columns.to_list()
     params = {
-        "colsample_bytree": uniform(0.7, 0.3),
-        "gamma": uniform(0, 0.5),
-        "learning_rate": uniform(0.03, 0.3),  # default 0.1
-        "max_depth": randint(2, 6),  # default 3
-        "n_estimators": randint(100, 150),  # default 100
-        "subsample": uniform(0.6, 0.4),
+            'num_leaves': [20, 30,50,80], #,100], #,1300,1800] #,2000,2500,2800,3000],
+            'max_depth': [15, 20, 40], #,40,45,50,55],
+            'n_estimators': [5000,10000], #,6000,8000,9000,10000],
+            'min_child_weight': [10, 13, 20], #,10,50,100], #,200,500,700,800,100],
+            'subsample': [0.2, 0.3,0.4], #, 0.6, 0.7, 0.8, 0.9, 1.0],
+            # 'reg_alpha': [0, 0.5],
+            'reg_lambda': [2, 5, 10],
+            'learning_rate': [0.05],
+	        'metric': ['rmse'],
+            'random_state': [42],
+            #'early_stopping_round': [130],
+	        'verbosity': [-1],
+	        'min_child_samples': [20, 50],
     }
-    xgb_model = xgb.XGBRegressor()
-    search = RandomizedSearchCV(
-        xgb_model,
-        param_distributions=params,
-        random_state=42,
-        n_iter=50,
-        cv=3,
-        n_jobs=-1,
-        return_train_score=True,
-        verbose=10,
-    )
-    search.fit(features, imbalance)
-    best_parameters = report_best_scores(search.cv_results_, 1)
+    model = LGBMRegressor(n_jobs=-1)
+    #model.set_params(**params)
+    gbm = RandomizedSearchCV(model, params, cv=3, scoring="neg_root_mean_squared_error", n_jobs=-1)
+    gbm.fit(features, imbalance) #, eval_set=[(X_test, y_test)], eval_metric="average_precision", verbose = -1)
+    # search = RandomizedSearchCV(
+    #     xgb_model,
+    #     param_distributions=params,
+    #     random_state=42,
+    #     n_iter=50,
+    #     cv=3,
+    #     n_jobs=-1,
+    #     return_train_score=True,
+    #     verbose=10,
+    # )
+    #search.fit(features, imbalance)
+    best_parameters = report_best_scores(gbm.cv_results_, 1)
 
     # Train on full data
     print("Training on full model")
-    xgb_model = xgb.XGBRegressor(**best_parameters)
-    xgb_model.fit(features, imbalance)
-    xgb_model.get_booster().feature_names = feature_names
-    pickle.dump(xgb_model, open("model.pickle", "wb"))
+    lgbm_model = LGBMRegressor(**best_parameters)
+    lgbm_model.fit(features, imbalance)
+    #lgbm_model.feature_names = feature_names
+    pickle.dump(lgbm_model, open("model.pickle", "wb"))
 
-    y_pred = xgb_model.predict(features)
+    y_pred = lgbm_model.predict(features)
     evaluate_model(y_pred, imbalance)
 
+    feature_imp = pd.DataFrame(sorted(zip(lgbm_model.feature_importances_,features)), columns=['Value','Feature'])
     # Plot feature importance
-    feature_importance = xgb_model.get_booster().get_score(importance_type="total_gain")
-    feature_importance = pd.json_normalize(feature_importance).T.reset_index()
-    feature_importance.columns = ["feature", "importance"]
-    feature_importance = feature_importance.sort_values("importance", ascending=False)
-    fig = px.bar(feature_importance, x="feature", y="importance")
-    fig.write_html("feature_importance.html")
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    # plt.figure(figsize=(30, 50))
+    # sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value", ascending=False))
+    # plt.title('LightGBM Features')
+    # plt.tight_layout()
+    # plt.show()
 
 
 if __name__ == "__main__":
