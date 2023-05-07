@@ -45,13 +45,13 @@ def model_train(df: pd.DataFrame) -> None:
     features, imbalance, feature_names = split_features_imbalance(df)
     feature_names = df.drop(columns=["imbalance", "ts"]).columns.to_list()
     params = {
-            'num_leaves': [20, 30,50,80], #,100], #,1300,1800] #,2000,2500,2800,3000],
-            'max_depth': [15, 20, 40], #,40,45,50,55],
-            'n_estimators': [5000,10000], #,6000,8000,9000,10000],
-            'min_child_weight': [10, 13, 20], #,10,50,100], #,200,500,700,800,100],
-            'subsample': [0.2, 0.3,0.4], #, 0.6, 0.7, 0.8, 0.9, 1.0],
+            'num_leaves': [10, 20, 30,50], #,100], #,1300,1800] #,2000,2500,2800,3000],
+            'max_depth': [10, 15, 20], #,40,45,50,55],
+            'n_estimators': [5000], #,6000,8000,9000,10000],
+            'min_child_weight': [10, 13], #,10,50,100], #,200,500,700,800,100],
+            'subsample': [0.3,0.4], #, 0.6, 0.7, 0.8, 0.9, 1.0],
             # 'reg_alpha': [0, 0.5],
-            'reg_lambda': [2, 5, 10],
+            'reg_lambda': [5, 10, 15],
             'learning_rate': [0.05],
 	        'metric': ['rmse'],
             'random_state': [42],
@@ -60,7 +60,7 @@ def model_train(df: pd.DataFrame) -> None:
 	        'min_child_samples': [20, 50],
     }
     model = LGBMRegressor(n_jobs=-1)
-    gbm = RandomizedSearchCV(model, params, cv=3, scoring="neg_root_mean_squared_error", n_jobs=-1)
+    gbm = GridSearchCV(model, params, cv=3, scoring="neg_root_mean_squared_error", n_jobs=-1)
     gbm.fit(features, imbalance) 
     best_parameters = report_best_scores(gbm.cv_results_, 1)
 
@@ -73,9 +73,9 @@ def model_train(df: pd.DataFrame) -> None:
     y_pred = lgbm_model.predict(features)
     evaluate_model(y_pred, imbalance)
 
-    feature_imp = pd.DataFrame(sorted(zip(lgbm_model.feature_importances_,features)), columns=['Value','Feature'])
+    #feature_imp = pd.DataFrame(sorted(zip(lgbm_model.feature_importances_,features)), columns=['Value','Feature'])
 
-    # Plot feature importance
+    #Plot feature importance
     # import matplotlib.pyplot as plt
     # import seaborn as sns
     # plt.figure(figsize=(30, 50))
