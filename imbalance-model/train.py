@@ -42,7 +42,9 @@ def evaluate_model(y_pred, imbalance) -> None:
 
 
 def model_train(df: pd.DataFrame) -> None:
-    features, imbalance, feature_names = split_features_imbalance(df)
+    train_size = int(0.8*df.shape[0])
+    features, imbalance, feature_names = split_features_imbalance(df[:train_size])
+    features_val, imbalance_val, _ = split_features_imbalance(df[train_size:])
     feature_names = df.drop(columns=["imbalance", "ts"]).columns.to_list()
     params = {
         "colsample_bytree": uniform(0.7, 0.3),
@@ -73,8 +75,13 @@ def model_train(df: pd.DataFrame) -> None:
     xgb_model.get_booster().feature_names = feature_names
     pickle.dump(xgb_model, open("model.pickle", "wb"))
 
+    print('Training scores:')
     y_pred = xgb_model.predict(features)
     evaluate_model(y_pred, imbalance)
+
+    print('Validation scores:')
+    y_pred_val = xgb_model.predict(features_val)
+    evaluate_model(y_pred_val, imbalance_val)
 
     # Plot feature importance
     feature_importance = xgb_model.get_booster().get_score(importance_type="total_gain")
