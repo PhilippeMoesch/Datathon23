@@ -7,10 +7,12 @@ def floor_datetime(x: pd.Series, raster: str = "15min") -> pd.Series:
 
 
 def q90(x):
+    print(len(x))
     return x.quantile(0.9)
 
 
 def q10(x):
+    print(len(x))
     return x.quantile(0.1)
 
 def holiday(df: pd.DataFrame) -> pd.DataFrame:
