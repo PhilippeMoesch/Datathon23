@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-
 def floor_datetime(x: pd.Series, raster: str = "15min") -> pd.Series:
     return x.dt.tz_convert("UTC").dt.floor(raster).dt.tz_convert("Europe/Zurich")
 
@@ -71,8 +70,12 @@ def shift_real_time_data(df: pd.DataFrame) -> pd.DataFrame:
         "mfrr_down",
         "imbalance",
     ]
-    shifted_columns = [f"{x}_delayed" for x in cols_to_shift]
-    df[shifted_columns] = df[cols_to_shift].shift(2)
+
+    HORIZON = 4 # x 15min
+    for i in range(HORIZON):
+        shifted_columns = [f"{x}_delayed_{i}" for x in cols_to_shift]
+        df[shifted_columns] = df[cols_to_shift].shift(2+i)
+    # Keep imbalance for the labels
     cols_to_shift.remove("imbalance")
     return df.drop(columns=cols_to_shift)
 
@@ -80,15 +83,55 @@ def shift_real_time_data(df: pd.DataFrame) -> pd.DataFrame:
 def fillna_with_mean(df: pd.DataFrame) -> pd.DataFrame:
     return df.fillna(df.mean())
 
+def temporal_encoding(df: pd.DataFrame) -> pd.DataFrame:
+    df["hour"] = df["ts"].dt.hour
+    df["minute"] = df["ts"].dt.minute
+    df["dayofweek"] = df["ts"].dt.dayofweek
+    return df
+
+def cyclicity_removal(df: pd.DataFrame, time_unit = ['hour','minute']) -> pd.DataFrame:
+    # get the 
+    if type(time_unit) == list:
+        for time in time_unit:
+            df[time] = getattr(df['ts'].dt, time)
+    elif type(time_unit) == str:
+        df[time_unit] = getattr(df['ts'].dt, time_unit)
+    else:
+        raise("ERROR: time_unit must be either a string of list of strings")
+
+    # get the average for each time of the day
+    df_ave_time = df.groupby(time_unit).mean()
+    df_ave_time = df_ave_time.reset_index()
+    # divide the data by its mean
+    merged_df = pd.merge(df, df_ave_time, on=time_unit)
+    merged_df= merged_df.set_index('ts_x').drop(columns='ts_y')
+    cols_x = merged_df.filter(like='_x').columns
+    cols_y = merged_df.filter(like='_y').columns
+    eps = 1e-1
+    merged_df[cols_x] = merged_df[cols_x].div(merged_df[cols_y].values+eps)
+    output_df = merged_df.drop(columns=cols_y).reset_index()
+    names_without_x = {col: col.replace('_x', '') for col in output_df.columns}
+    output_df = output_df.rename(columns=names_without_x)
+    output_df = output_df.drop(columns = time_unit)
+
+    keep_original_columns = output_df.filter(like='imbalance').columns
+    output_df[keep_original_columns] = df[keep_original_columns]
+
+    return output_df
 
 def feature_pipeline(train_or_test: str = "train") -> pd.DataFrame:
-    indicator = pd.read_parquet(f"data/{train_or_test}/indicator.parquet")
+    indicator = pd.read_parquet(f"../{train_or_test}/indicator.parquet")
     indicator = aggregate_indicator(indicator)
-    main = pd.read_parquet(f"data/{train_or_test}/main.parquet")
+    main = pd.read_parquet(f"../{train_or_test}/main.parquet")
     main = aggregate_wind(main)
     main = shift_real_time_data(main)
-    frequency = pd.read_parquet(f"data/{train_or_test}/frequency.parquet")
+   
+    main = cyclicity_removal(main)
+    main = cyclicity_removal(main, time_unit="dayofweek")
+    frequency = pd.read_parquet(f"../{train_or_test}/frequency.parquet")
     frequency = aggregate_frequency(frequency)
     main = main.merge(frequency, how="left").merge(indicator, how="left")
     main = fillna_with_mean(main)
+    
+    main = temporal_encoding(main)
     return main
