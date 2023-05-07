@@ -104,7 +104,7 @@ def cyclicity_removal(df: pd.DataFrame, time_unit = ['hour','minute']) -> pd.Dat
     df_ave_time = df_ave_time.reset_index()
     # divide the data by its mean
     merged_df = pd.merge(df, df_ave_time, on=time_unit)
-    merged_df= merged_df.set_index('ts_x').drop(columns='ts_y')
+    merged_df= merged_df.set_index('ts')# .drop(columns='ts_y')
     cols_x = merged_df.filter(like='_x').columns
     cols_y = merged_df.filter(like='_y').columns
     eps = 1e-1
@@ -120,15 +120,15 @@ def cyclicity_removal(df: pd.DataFrame, time_unit = ['hour','minute']) -> pd.Dat
     return output_df
 
 def feature_pipeline(train_or_test: str = "train") -> pd.DataFrame:
-    indicator = pd.read_parquet(f"../{train_or_test}/indicator.parquet")
+    indicator = pd.read_parquet(f"data/{train_or_test}/indicator.parquet")
     indicator = aggregate_indicator(indicator)
-    main = pd.read_parquet(f"../{train_or_test}/main.parquet")
+    main = pd.read_parquet(f"data/{train_or_test}/main.parquet")
     main = aggregate_wind(main)
     main = shift_real_time_data(main)
    
     main = cyclicity_removal(main)
     main = cyclicity_removal(main, time_unit="dayofweek")
-    frequency = pd.read_parquet(f"../{train_or_test}/frequency.parquet")
+    frequency = pd.read_parquet(f"data/{train_or_test}/frequency.parquet")
     frequency = aggregate_frequency(frequency)
     main = main.merge(frequency, how="left").merge(indicator, how="left")
     main = fillna_with_mean(main)
