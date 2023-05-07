@@ -13,17 +13,32 @@ def q90(x):
 def q10(x):
     return x.quantile(0.1)
 
+def holiday(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.assign(holiday=0)
+    # data_ = data.set_index('ts')
+    # loop over the list of dates and set weekday to zero for those dates
+    for date in ['2022-10-03','2022-12-25','2022-12-26','2023-01-01']:
+        mask = df['ts'].dt.date == pd.to_datetime(date).date()
+        df.loc[mask, 'holiday'] = 1
+
+    # set the weekends also as holidays
+    df.loc[df['ts'].dt.dayofweek == 5, 'holiday'] = 1
+    df.loc[df['ts'].dt.dayofweek == 6, 'holiday'] = 1
+    return df
+
 
 def aggregate_indicator(df: pd.DataFrame) -> pd.DataFrame:
+    # discretise the grid into an equidistant, 1minute grid from midnight 00:00 to midnight 23:59
     t_index = pd.date_range(
         start=df["ts"].min().floor("1d"),
-        end=df["ts"].max().ceil("1d") - pd.Timedelta(minutes=1),
+        end=df["ts"].max().ceil("1d") - pd.Timedelta(minutes=1), #to get 23:59 instead of 00:00 again
         freq="1min",
         name="ts",
     )
     df = df.set_index("ts").reindex(t_index).fillna(0).reset_index()
     df["ts_15min"] = floor_datetime(df["ts"])
     df = df.loc[(df["ts"] - pd.to_timedelta(5, unit="min")) <= df["ts_15min"]]
+    # take the average of the one hour grouped by 15minutes
     df = (
         df.groupby("ts_15min", as_index=False)["indicator"]
         .mean()
@@ -91,4 +106,6 @@ def feature_pipeline(train_or_test: str = "train") -> pd.DataFrame:
     frequency = aggregate_frequency(frequency)
     main = main.merge(frequency, how="left").merge(indicator, how="left")
     main = fillna_with_mean(main)
+
+    main = holiday(main)
     return main
